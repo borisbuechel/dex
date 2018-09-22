@@ -115,6 +115,7 @@ const (
 )
 
 const (
+	grantTypeClientCredentials = "client_credentials"
 	grantTypeAuthorizationCode = "authorization_code"
 	grantTypeRefreshToken      = "refresh_token"
 )
@@ -262,6 +263,52 @@ type idTokenClaims struct {
 type federatedIDClaims struct {
 	ConnectorID string `json:"connector_id,omitempty"`
 	UserID      string `json:"user_id,omitempty"`
+}
+
+func (s *Server) newTechnicalIDToken(clientID string) (idToken string, expiry time.Time, err error) {
+	keys, err := s.storage.GetKeys()
+	if err != nil {
+		s.logger.Errorf("Failed to get keys: %v", err)
+		return "", expiry, err
+	}
+	signingKey := keys.SigningKey
+	if signingKey == nil {
+		return "", expiry, fmt.Errorf("no key to sign payload with")
+	}
+	signingAlg, err := signatureAlgorithm(signingKey)
+	if err != nil {
+		return "", expiry, err
+	}
+	issuedAt := s.now()
+	expiry = issuedAt.Add(s.idTokensValidFor)
+	sub := &internal.IDTokenSubject{
+		UserId: clientID,
+	}
+	subjectString, err := internal.Marshal(sub)
+	if err != nil {
+		s.logger.Errorf("failed to marshal offline session ID: %v", err)
+		return "", expiry, fmt.Errorf("failed to marshal offline session ID: %v", err)
+	}
+	tok := idTokenClaims{
+		Issuer:   s.issuerURL.String(),
+		Subject:  subjectString,
+		Nonce:    "",
+		Expiry:   expiry.Unix(),
+		IssuedAt: issuedAt.Unix(),
+	}
+	if len(tok.Audience) == 0 {
+		// Client didn't ask for cross client audience. Set the current
+		// client as the audience.
+		tok.Audience = audience{clientID}
+	}
+	payload, err := json.Marshal(tok)
+	if err != nil {
+		return "", expiry, fmt.Errorf("could not serialize claims: %v", err)
+	}
+	if idToken, err = signPayload(signingKey, signingAlg, payload); err != nil {
+		return "", expiry, fmt.Errorf("failed to sign payload: %v", err)
+	}
+	return idToken, expiry, nil
 }
 
 func (s *Server) newIDToken(clientID string, claims storage.Claims, scopes []string, nonce, accessToken, connID string) (idToken string, expiry time.Time, err error) {
