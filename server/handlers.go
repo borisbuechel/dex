@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -655,12 +654,12 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 		roots := x509.NewCertPool()
 		ok = roots.AppendCertsFromPEM([]byte(rootPEM))
 		if !ok {
-			log.Fatal(errors.New("Failed to append LDAP root ca"))
+			s.logger.Errorf("failed to create RootCA")
 		}
 		tlsConfig := &tls.Config{RootCAs: roots}
 		l, err := ldap.DialTLS(network, tlsHostAddress, tlsConfig)
 		if err != nil {
-			log.Fatal(err)
+			s.logger.Errorf("failed to dial LDAP: %v", err)
 		}
 		defer l.Close()
 		err = l.Bind(clientID, clientSecret)
@@ -683,14 +682,14 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 		)
 		sr, err := l.Search(searchRequest)
 		if err != nil {
-			log.Fatal(err)
+			s.logger.Errorf("failed to search LDAP: %v", err)
 		}
 		var entitlements []string
 		var authGroups []string
 		for _, entry := range sr.Entries {
 			// 1. Appreach, all roles are single attributes within a string array
 			entitlements := entry.GetAttributeValues("dcxIapAuthGrps")
-			log.Println(entitlements)
+			s.logger.Println(entitlements)
 			authGroups := entry.GetAttributeValues("dcxIapEntGrps")
 		}
 		// TODO hand over all user information

@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -282,13 +281,13 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, r *http.Request) (ide
 	roots := x509.NewCertPool()
 	ok = roots.AppendCertsFromPEM([]byte(rootPEM))
 	if !ok {
-		log.Fatal(errors.New("Failed to append LDAP root ca"))
+		return identity, errors.New("Failed to append LDAP root ca")
 	}
 	tlsConfig := &tls.Config{RootCAs: roots}
 
 	l, err := ldap.DialTLS(network, tlsHostAddress, tlsConfig)
 	if err != nil {
-		log.Fatal(err)
+		return identity, err
 	}
 	defer l.Close()
 	userID := identity.UserID
@@ -302,14 +301,14 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, r *http.Request) (ide
 	)
 	sr, err := l.Search(searchRequest)
 	if err != nil {
-		log.Fatal(err)
+		return identity, err
 	}
 	for _, entry := range sr.Entries {
 		// 1. Appreach, all roles are single attributes within a string array
 		entitlements := entry.GetAttributeValues("dcxIapAuthGrps")
-		log.Println(entitlements)
+		fmt.Println(entitlements)
 		authGroups := entry.GetAttributeValues("dcxIapEntGrps")
-		log.Println(authGroups)
+		fmt.Println(authGroups)
 		// 2. Approach, all roles in one string with ',' delimiter
 		var attrSlice []string
 		for _, attr := range ldapUserAttrList {
@@ -320,7 +319,7 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, r *http.Request) (ide
 
 			}
 		}
-		log.Println(attrSlice)
+		fmt.Println(attrSlice)
 	}
 
 	return identity, nil
