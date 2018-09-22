@@ -649,20 +649,6 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 		clientID = r.PostFormValue("client_id")
 		clientSecret = r.PostFormValue("client_secret")
 	}
-	client, err := s.storage.GetClient(clientID)
-	if err != nil {
-		if err != storage.ErrNotFound {
-			s.logger.Errorf("failed to get client: %v", err)
-			s.tokenErrHelper(w, errServerError, "", http.StatusInternalServerError)
-		} else {
-			s.tokenErrHelper(w, errInvalidClient, "Invalid client credentials.", http.StatusUnauthorized)
-		}
-		return
-	}
-	if client.Secret != clientSecret {
-		s.tokenErrHelper(w, errInvalidClient, "Invalid client credentials.", http.StatusUnauthorized)
-		return
-	}
 	grantType := r.PostFormValue("grant_type")
 	switch grantType {
 	case grantTypeClientCredentials:
@@ -710,9 +696,7 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 		// TODO hand over all user information
 		s.handleClientCredentials(w, r, clientID, l)
 	case grantTypeAuthorizationCode:
-		s.handleAuthCode(w, r, client)
 	case grantTypeRefreshToken:
-		s.handleRefreshToken(w, r, client)
 		client, err := s.storage.GetClient(clientID)
 		if err != nil {
 			if err != storage.ErrNotFound {
