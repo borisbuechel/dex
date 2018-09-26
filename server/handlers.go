@@ -1,8 +1,6 @@
 package server
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,10 +13,10 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	ldap "gopkg.in/ldap.v2"
 	jose "gopkg.in/square/go-jose.v2"
 
 	"github.com/dexidp/dex/connector"
+	utils "github.com/dexidp/dex/connector/utils"
 	"github.com/dexidp/dex/server/internal"
 	"github.com/dexidp/dex/storage"
 )
@@ -651,17 +649,12 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 	grantType := r.PostFormValue("grant_type")
 	switch grantType {
 	case grantTypeClientCredentials:
-		roots := x509.NewCertPool()
-		ok = roots.AppendCertsFromPEM([]byte(rootPEM))
-		if !ok {
-			s.logger.Errorf("failed to create RootCA")
-		}
-		tlsConfig := &tls.Config{RootCAs: roots}
-		l, err := ldap.DialTLS(network, tlsHostAddress, tlsConfig)
+		l, err := utils.OpenTLS(rootPEM, network, tlsHostAddress)
 		if err != nil {
 			s.logger.Errorf("failed to dial LDAP: %v", err)
 		}
 		defer l.Close()
+
 		err = l.Bind(clientID, clientSecret)
 		if err != nil {
 			if err != storage.ErrNotFound {
@@ -673,27 +666,19 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		searchRequest := ldap.NewSearchRequest(
-			fmt.Sprintf("uid=%s,dc=dummy,dc=com", clientID), // The base dn to search
-			ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
-			"(&(objectClass=*))", // The filter to apply
-			ldapUserAttrList,     // A list attributes to retrieve
-			nil,
-		)
-		sr, err := l.Search(searchRequest)
+		sr, err := utils.SearchUserAttributesForClass(l, clientID, "*", ldapUserAttrList)
 		if err != nil {
 			s.logger.Errorf("failed to search LDAP: %v", err)
 		}
-		var entitlements []string
-		var authGroups []string
+		entitlements := []string{}
+		authGroups := []string{}
 		for _, entry := range sr.Entries {
 			// 1. Appreach, all roles are single attributes within a string array
-			entitlements := entry.GetAttributeValues("dcxIapAuthGrps")
-			s.logger.Println(entitlements)
-			authGroups := entry.GetAttributeValues("dcxIapEntGrps")
+			entitlements := utils.AppendAll(entitlements, entry.GetAttributeValues("dcxIapAuthGrps"))
+			authGroups := utils.AppendAll(authGroups, entry.GetAttributeValues("dcxIapEntGrps"))
 		}
 		// TODO hand over all user information
-		s.handleClientCredentials(w, r, clientID, l)
+		s.handleClientCredentials(w, r, clientID, entitlements, authGroups)
 	case grantTypeAuthorizationCode:
 	case grantTypeRefreshToken:
 		client, err := s.storage.GetClient(clientID)
@@ -721,7 +706,8 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 }
 
 // handle client credentials an access token request
-func (s *Server) handleClientCredentials(w http.ResponseWriter, r *http.Request, clientID string, l *ldap.Conn) {
+
+func (s *Server) handleClientCredentials(w http.ResponseWriter, r *http.Request, clientID string, entitlements, authGroups []string) {
 	accessToken := storage.NewID()
 	idToken, expiry, err := s.newTechnicalIDToken(clientID)
 	if err != nil {

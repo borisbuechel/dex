@@ -16,6 +16,7 @@ import (
 	ldap "gopkg.in/ldap.v2"
 
 	"github.com/dexidp/dex/connector"
+	"github.com/dexidp/dex/connector/utils"
 )
 
 // Config holds configuration options for OpenID Connect logins.
