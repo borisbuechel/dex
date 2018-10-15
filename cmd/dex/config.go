@@ -135,11 +135,7 @@ type UserinfoConfig interface {
 }
 
 var userinfoAdapters = map[string]func() UserinfoConfig{
-<<<<<<< HEAD
 	"drd": func() UserinfoConfig {return new(drd.LDAPConfig)},
-=======
-	"dai_drd": func() UserinfoConfig { return new(dai_drd.LDAPConfig) },
->>>>>>> 0ffa40de8bab7ce390930ebecab0452659769b9f
 }
 
 func (s *Userinfo) UnmarshalJSON(b []byte) error {
