@@ -1,5 +1,5 @@
-hash: 235996b89c7836e885a406f9938a9d9084d7972314fd05fc8e92de646be7a24e
-updated: 2018-09-25T09:39:15.743767+02:00
+hash: 12d0ad2fc0df4ab221e45c1ba7821708b908033c82741e250cc46dcd445b67eb
+updated: 2018-09-30T14:07:57.901347233-04:00
 imports:
 - name: github.com/beevik/etree
   version: 4cd0dd976db869f817248477718071a28e978df0
@@ -109,6 +109,9 @@ imports:
   subpackages:
   - bcrypt
   - blowfish
+  - ed25519
+  - ed25519/internal/edwards25519
+  - pbkdf2
 - name: golang.org/x/net
   version: 5602c733f70afc6dcec6766be0d5034d4c4f14de
   subpackages:
@@ -122,6 +125,7 @@ imports:
 - name: golang.org/x/oauth2
   version: 08c8d727d2392d18286f9f88ad775ad98f09ab33
   subpackages:
+  - bitbucket
   - github
   - internal
 - name: golang.org/x/sys
@@ -169,7 +173,7 @@ imports:
 - name: gopkg.in/ldap.v2
   version: 0e7db8eb77695b5a952f0e5d78df9ab160050c73
 - name: gopkg.in/square/go-jose.v2
-  version: 8c5257b2f658f86d174ae68c6a592eaf6a9608d9
+  version: 8254d6c783765f38c8675fae4427a1fe73fbd09d
   subpackages:
   - cipher
   - json
