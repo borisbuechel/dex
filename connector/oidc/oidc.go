@@ -13,8 +13,10 @@ import (
 	oidc "github.com/coreos/go-oidc"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
+	ldap "gopkg.in/ldap.v2"
 
 	"github.com/dexidp/dex/connector"
+	"github.com/dexidp/dex/connector/utils"
 )
 
 // Config holds configuration options for OpenID Connect logins.
@@ -41,6 +43,13 @@ type Config struct {
 	AuthURL  string
 	TokenURL string
 	JWKURL   string
+
+	// LDAP configuration
+	Network            string   `json:"network"`
+	TLSHostAddress     string   `json:"tlsHostAddress"`
+	HostAddress        string   `json:"hostAddress"`
+	RootPEM            string   `json:"rootPEM"`
+	LDAPUserAttributes []string `json:"ldapUserAttributes"`
 }
 
 // Domains that don't support basic auth. golang.org/x/oauth2 has an internal
@@ -127,7 +136,13 @@ func (c *Config) Open(id string, logger logrus.FieldLogger) (conn connector.Conn
 		scopes = append(scopes, "profile", "email")
 	}
 
-	// clientID := c.ClientID
+	var ldapConn *ldap.Conn
+	if c.TLSHostAddress != "" {
+		ldapConn, err := utils.OpenTLS(c.RootPEM, c.Network, c.TLSHostAddress)
+	} else {
+		ldapConn, err := utils.Open(c.Network, c.HostAddress)
+	}
+
 	return &oidcConnector{
 		redirectURI: c.RedirectURI,
 		oauth2Config: &oauth2.Config{
@@ -137,10 +152,12 @@ func (c *Config) Open(id string, logger logrus.FieldLogger) (conn connector.Conn
 			Scopes:       scopes,
 			RedirectURL:  c.RedirectURI,
 		},
-		verifier:      idTokenVerifier,
-		logger:        logger,
-		cancel:        cancel,
-		hostedDomains: c.HostedDomains,
+		verifier:           idTokenVerifier,
+		logger:             logger,
+		cancel:             cancel,
+		hostedDomains:      c.HostedDomains,
+		ldapConnection:     ldapConn,
+		ldapUserAttributes: c.LDAPUserAttributes,
 	}, nil
 }
 
@@ -150,13 +167,15 @@ var (
 )
 
 type oidcConnector struct {
-	redirectURI   string
-	oauth2Config  *oauth2.Config
-	verifier      *oidc.IDTokenVerifier
-	ctx           context.Context
-	cancel        context.CancelFunc
-	logger        logrus.FieldLogger
-	hostedDomains []string
+	redirectURI        string
+	oauth2Config       *oauth2.Config
+	verifier           *oidc.IDTokenVerifier
+	ctx                context.Context
+	cancel             context.CancelFunc
+	logger             logrus.FieldLogger
+	hostedDomains      []string
+	ldapConnection     *ldap.Conn
+	ldapUserAttributes []string
 }
 
 func (c *oidcConnector) Close() error {
@@ -196,6 +215,7 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, r *http.Request) (ide
 	if errType := q.Get("error"); errType != "" {
 		return identity, &oauth2Error{errType, q.Get("error_description")}
 	}
+	// Exchange converts an authorization code into a token.
 	token, err := c.oauth2Config.Exchange(r.Context(), q.Get("code"))
 	if err != nil {
 		return identity, fmt.Errorf("oidc: failed to get token: %v", err)
@@ -240,6 +260,22 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, r *http.Request) (ide
 		Email:         claims.Email,
 		EmailVerified: claims.EmailVerified,
 	}
+
+	l := c.ldapConnection
+	defer l.Close()
+	userID := identity.Username
+	sr, err := utils.SearchUserAttributesForClass(l, userID, "*", ldapUserAttrList)
+	if err != nil {
+		return identity, err
+	}
+	entitlements := []string{}
+	authGroups := []string{}
+	for _, entry := range sr.Entries {
+		// 1. Appreach, all roles are single attributes within a string array
+		entitlements := utils.AppendAll(entitlements, entry.GetAttributeValues("dcxIapAuthGrps"))
+		authGroups := utils.AppendAll(authGroups, entry.GetAttributeValues("dcxIapEntGrps"))
+	}
+
 	return identity, nil
 }
 
