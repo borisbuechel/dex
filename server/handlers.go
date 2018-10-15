@@ -596,6 +596,7 @@ func (s *Server) sendCodeResponse(w http.ResponseWriter, r *http.Request, authRe
 	http.Redirect(w, r, u.String(), http.StatusSeeOther)
 }
 
+// TODO: check if the requested client needs to be authenticated remotely
 func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 	clientID, clientSecret, ok := r.BasicAuth()
 	if ok {
@@ -634,9 +635,33 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 		s.handleAuthCode(w, r, client)
 	case grantTypeRefreshToken:
 		s.handleRefreshToken(w, r, client)
+	case grantTypeClientCredentials:
+		s.handleClientCredentials(w, r, client)
 	default:
 		s.tokenErrHelper(w, errInvalidGrant, "", http.StatusBadRequest)
 	}
+}
+
+func (s *Server) handleClientCredentials(w http.ResponseWriter, r *http.Request, client storage.Client){
+	s.logger.Debugf("calling handleClientCredentials()")
+
+	// perform an LDAP bin with the provided password from the basic auth header
+	if err := s.userinfoAdapter.Authenticate("techuser", client.ID, client.Secret); err != nil {
+		s.logger.Errorf("failed to authenticate user: %v", err)
+		s.tokenErrHelper(w, errServerError, "", http.StatusInternalServerError)
+		return
+	}
+	
+	accessToken := storage.NewID()
+	idToken, expiry, err := s.newIDToken(client.ID, storage.Claims{UserID: client.ID}, []string{}, "", accessToken, "")
+	if err != nil {
+		s.logger.Errorf("failed to create ID token: %v", err)
+		s.tokenErrHelper(w, errServerError, "", http.StatusInternalServerError)
+		return
+	}
+
+	// No refresh token needed
+	s.writeAccessToken(w, idToken, accessToken, "", expiry)
 }
 
 // handle an access token request https://tools.ietf.org/html/rfc6749#section-4.1.3

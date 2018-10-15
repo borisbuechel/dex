@@ -9,6 +9,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/dexidp/dex/userinfo"
+	"github.com/dexidp/dex/userinfo/drd"
+
 	"github.com/dexidp/dex/server"
 	"github.com/dexidp/dex/storage"
 	"github.com/dexidp/dex/storage/etcd"
@@ -46,6 +49,9 @@ type Config struct {
 	// querying the storage. Cannot be specified without enabling a passwords
 	// database.
 	StaticPasswords []password `json:"staticPasswords"`
+
+	// Service to do all relevant LDAP operations for a given user.
+	Userinfo Userinfo `json:"userinfo"`
 }
 
 type password storage.Password
@@ -117,6 +123,46 @@ type GRPC struct {
 	TLSCert     string `json:"tlsCert"`
 	TLSKey      string `json:"tlsKey"`
 	TLSClientCA string `json:"tlsClientCA"`
+}
+
+type Userinfo struct {
+	Type   string         `json:"type"`
+	Config UserinfoConfig `json:"config"`
+}
+
+type UserinfoConfig interface {
+	Open(logrus.FieldLogger) (userinfo.Userinfo, error)
+}
+
+var userinfoAdapters = map[string]func() UserinfoConfig{
+	"drd": func() UserinfoConfig {return new(drd.LDAPConfig)},
+}
+
+func (s *Userinfo) UnmarshalJSON(b []byte) error {
+	var adapter struct {
+		Type   string          `json:"type"`
+		Config json.RawMessage `json:"config"`
+	}
+	if err := json.Unmarshal(b, &adapter); err != nil {
+		return fmt.Errorf("parse adapter: %v", err)
+	}
+	f, ok := userinfoAdapters[adapter.Type]
+	if !ok {
+		return fmt.Errorf("unknown adapter type %q", adapter.Type)
+	}
+
+	adapterConfig := f()
+	if len(adapter.Config) != 0 {
+		data := []byte(os.ExpandEnv(string(adapter.Config)))
+		if err := json.Unmarshal(data, adapterConfig); err != nil {
+			return fmt.Errorf("parse adapter config: %v", err)
+		}
+	}
+	*s = Userinfo{
+		Type:   adapter.Type,
+		Config: adapterConfig,
+	}
+	return nil
 }
 
 // Storage holds app's storage configuration.

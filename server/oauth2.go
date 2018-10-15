@@ -23,6 +23,7 @@ import (
 
 	"github.com/dexidp/dex/connector"
 	"github.com/dexidp/dex/storage"
+	// "github.com/dexidp/dex/userinfo"
 )
 
 // TODO(ericchiang): clean this file up and figure out more idiomatic error handling.
@@ -117,6 +118,7 @@ const (
 const (
 	grantTypeAuthorizationCode = "authorization_code"
 	grantTypeRefreshToken      = "refresh_token"
+	grantTypeClientCredentials = "client_credentials"
 )
 
 const (
@@ -294,6 +296,17 @@ func (s *Server) newIDToken(clientID string, claims storage.Claims, scopes []str
 	// 	s.logger.Errorf("failed to marshal offline session ID: %v", err)
 	// 	return "", expiry, fmt.Errorf("failed to marshal offline session ID: %v", err)
 	// }
+
+	ldapEntry, err := s.userinfoAdapter.GetUserInformation( "techuser", claims.UserID)
+	if err != nil {
+		return "", expiry, fmt.Errorf("error retrieving userinfo: %v", err)
+	}
+
+	for _, entry := range ldapEntry.Entries {
+		s.logger.Debugf("dn: %s", entry.DN)
+	}
+	
+
 
 	tok := idTokenClaims{
 		Issuer:   s.issuerURL.String(),

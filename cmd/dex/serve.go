@@ -152,6 +152,12 @@ func serve(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	userinfoAdapter, err := c.Userinfo.Config.Open(logger)
+	if err != nil {
+		return fmt.Errorf("failed to initialize userinfo adapter: %v", err)
+	}
+	logger.Infof("config userinfo adapter: %s", c.Userinfo.Type)
+
 	s, err := c.Storage.Config.Open(logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %v", err)
@@ -225,6 +231,7 @@ func serve(cmd *cobra.Command, args []string) error {
 		Logger:                 logger,
 		Now:                    now,
 		PrometheusRegistry:     prometheusRegistry,
+		Userinfo:               userinfoAdapter,
 	}
 	if c.Expiry.SigningKeys != "" {
 		signingKeys, err := time.ParseDuration(c.Expiry.SigningKeys)

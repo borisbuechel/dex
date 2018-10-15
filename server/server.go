@@ -34,6 +34,8 @@ import (
 	"github.com/dexidp/dex/connector/oidc"
 	"github.com/dexidp/dex/connector/saml"
 	"github.com/dexidp/dex/storage"
+
+	"github.com/dexidp/dex/userinfo"
 )
 
 // LocalConnector is the local passwordDB connector which is an internal
@@ -81,6 +83,9 @@ type Config struct {
 	Logger logrus.FieldLogger
 
 	PrometheusRegistry *prometheus.Registry
+
+	// Service to do all relevant LDAP operations for a given user.
+	Userinfo userinfo.Userinfo
 }
 
 // WebConfig holds the server's frontend templates and asset configuration.
@@ -140,6 +145,9 @@ type Server struct {
 	idTokensValidFor time.Duration
 
 	logger logrus.FieldLogger
+
+	// Service to do all relevant LDAP operations for a given user.
+	userinfoAdapter userinfo.Userinfo
 }
 
 // NewServer constructs a server from the provided config.
@@ -201,6 +209,7 @@ func newServer(ctx context.Context, c Config, rotationStrategy rotationStrategy)
 		now:                    now,
 		templates:              tmpls,
 		logger:                 c.Logger,
+		userinfoAdapter:        c.Userinfo,
 	}
 
 	// Retrieves connector objects in backend storage. This list includes the static connectors
