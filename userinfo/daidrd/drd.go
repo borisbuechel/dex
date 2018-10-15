@@ -1,4 +1,4 @@
-package dai_drd
+package drd
 
 import (	
 	"fmt"
@@ -81,20 +81,29 @@ func (c *conn) Close() {
 	c.ldap.Close()
 }
 
-func (c *conn) Authenticate() error {
-	return errors.New("not implemented")
+func (c *conn) Authenticate(index, userID, userPassword string) error {
+	c.logger.Debugf("Authenticate(): index=%s, userID=%s", index, userID)
+	
+	dn := fmt.Sprintf("uid=%s,%s",userID,c.userSearchIndex[index].BaseDN)
+
+	if _, err := c.ldap.SimpleBind(&ldap.SimpleBindRequest{Username: dn, Password: userPassword}); err != nil {
+		c.logger.Debugf("error during ldap bind")
+		return err
+	}
+	c.logger.Debugf("bind successful")
+	return nil
 }
 
-func (c *conn) GetUserInformation(userSearchID, userID string) (*ldap.SearchResult, error) {
-	c.logger.Debugf("SearchUserAttributesForClass(): userSearchID=%s, userID=%s", userSearchID, userID) 
+func (c *conn) GetUserInformation(index, userID string) (*ldap.SearchResult, error) {
+	c.logger.Debugf("SearchUserAttributesForClass(): index=%s, userID=%s", index, userID) 
 	
-	dn := fmt.Sprintf("uid=%s,%s",userID,c.userSearchIndex[userSearchID].BaseDN)
+	dn := fmt.Sprintf("uid=%s,%s",userID,c.userSearchIndex[index].BaseDN)
 	c.logger.Debugf(">>> %s", dn)
 	searchRequest := ldap.NewSearchRequest(
 		dn, // The base dn to search
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
-		c.userSearchIndex[userSearchID].Filter, // The filter to apply
-		c.userSearchIndex[userSearchID].LDAPUserAttrList,                                // A list attributes to retrieve
+		c.userSearchIndex[index].Filter, 			// The filter to apply
+		c.userSearchIndex[index].LDAPUserAttrList, 	// A list attributes to retrieve
 		nil,
 	)
 	return c.ldap.Search(searchRequest)

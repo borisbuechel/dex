@@ -10,7 +10,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/dexidp/dex/userinfo"
-	"github.com/dexidp/dex/userinfo/dai_drd"
+	"github.com/dexidp/dex/userinfo/drd"
 
 	"github.com/dexidp/dex/server"
 	"github.com/dexidp/dex/storage"
@@ -134,7 +134,7 @@ type UserinfoConfig interface {
 }
 
 var userinfoAdapters = map[string]func() UserinfoConfig{
-	"dai_drd": func() UserinfoConfig {return new(dai_drd.LDAPConfig)},
+	"drd": func() UserinfoConfig {return new(drd.LDAPConfig)},
 }
 
 func (s *Userinfo) UnmarshalJSON(b []byte) error {

@@ -8,8 +8,13 @@ type Userinfo interface{
 	Close()
 	
 	// Authenticate a (techuser) against the password stored in the DRD
-	Authenticate() error
+	// this will authenticate a given userID and password (from the basic auth header from the client credentils flow),
+	// and tries an ldap bind against the provided ldap connection.
+	// Obviously, this will only work for non-human users, as they have their user password in a different ldap 
+	Authenticate(index, userID, userPassword string) error
 
 	// Retrieves user attributes
-	GetUserInformation(userSearchID, userID string) (*ldap.SearchResult, error)
+	// index defines the index string to lookup the provided user search configuration in the dex config file
+	// userID defines the userID to lookup
+	GetUserInformation(index, userID string) (*ldap.SearchResult, error)
 }
